@@ -144,6 +144,7 @@ impl AppState {
             self.counters.clone(),
         )
         .await?;
+        inference.install((*self.inference.cost_map()).clone());
         Ok(Self {
             inference,
             key_limiter,

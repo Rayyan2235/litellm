@@ -2,6 +2,7 @@ mod admit;
 mod boot;
 mod callbacks;
 mod config_sync;
+mod cost_map;
 mod db;
 mod error;
 mod gateway_requests;
@@ -24,6 +25,7 @@ pub use callbacks::{
     model_capacity::{self, ModelCapacity},
     parallel_request_limiter::{self, KeyLimiter},
 };
+pub use cost_map::CostMapRefresh;
 pub use error::Error;
 pub use gateway_requests::{Category, GatewayRequests};
 pub use live::{Live, Served};
