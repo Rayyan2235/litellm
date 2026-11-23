@@ -116,7 +116,7 @@ pub(crate) async fn inference_over(
     counters: Arc<RateLimits>,
 ) -> Result<Inference, Error> {
     let catalog = Catalog::parse(BUNDLED_REGISTRY)?.value;
-    let (router, shaping) = boot::router(config, &catalog).await?;
+    let router = boot::router(config).await?;
     let deployments = router.registry().deployments(&DeploymentFilter::default());
     let windows = host::ContextWindows::read(&catalog, &deployments).await;
     let limits = parallel_request_limiter::Settings::read(config, variables);
@@ -141,7 +141,7 @@ pub(crate) async fn inference_over(
         resources.http.clone(),
         resources.secrets.clone(),
         router,
-        shaping,
+        config.litellm_settings.drop_params == Some(true),
         routing,
         host::NativeHost::new(Arc::new(callbacks), Arc::new(windows)),
     )?;
