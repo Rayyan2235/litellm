@@ -145,7 +145,7 @@ from litellm.utils import (
 if TYPE_CHECKING:
     from litellm.llms.anthropic.cost_calculation import cost_per_token as anthropic_cost_per_token
     from litellm.llms.anthropic.cost_calculation import (
-        get_anthropic_web_search_requests_from_response as get_anthropic_web_search_requests_from_response,
+        get_anthropic_web_search_requests_from_response,
     )
     from litellm.llms.azure.cost_calculation import cost_per_token as azure_openai_cost_per_token
     from litellm.llms.azure_ai.cost_calculator import cost_per_token as azure_ai_cost_per_token
@@ -158,14 +158,12 @@ if TYPE_CHECKING:
     from litellm.llms.lemonade.cost_calculator import cost_per_token as lemonade_cost_per_token
     from litellm.llms.openai.cost_calculation import cost_per_second as openai_cost_per_second
     from litellm.llms.openai.cost_calculation import cost_per_token as openai_cost_per_token
-    from litellm.llms.openai.cost_calculation import video_clip_cost as video_clip_cost
-    from litellm.llms.openai.cost_calculation import video_output_cost_per_second as video_output_cost_per_second
+    from litellm.llms.openai.cost_calculation import video_clip_cost, video_output_cost_per_second
     from litellm.llms.perplexity.cost_calculator import cost_per_token as perplexity_cost_per_token
     from litellm.llms.tencent.cost_calculator import cost_per_token as tencent_cost_per_token
-    from litellm.llms.together_ai.cost_calculator import get_model_params_and_category as get_model_params_and_category
-    from litellm.llms.together_ai.cost_calculator import has_together_registry_pricing as has_together_registry_pricing
+    from litellm.llms.together_ai.cost_calculator import get_model_params_and_category, has_together_registry_pricing
     from litellm.llms.vertex_ai.common_utils import (
-        get_vertex_ai_lyria_generation_cost as get_vertex_ai_lyria_generation_cost,
+        get_vertex_ai_lyria_generation_cost,
     )
     from litellm.llms.vertex_ai.cost_calculator import cost_per_character as google_cost_per_character
     from litellm.llms.vertex_ai.cost_calculator import cost_per_token as google_cost_per_token
