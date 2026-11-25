@@ -1,5 +1,6 @@
 import importlib
 import json
+import re
 from typing import Final
 
 import pytest
@@ -39,7 +40,7 @@ def test_provider_function_imports_nothing_until_called():
 
 
 def test_provider_function_rejects_a_non_callable():
-    with pytest.raises(TypeError, match="litellm.constants:DEFAULT_MAX_RETRIES is not callable"):
+    with pytest.raises(TypeError, match=re.escape("litellm.constants:DEFAULT_MAX_RETRIES is not callable")):
         ProviderFunction("litellm.constants", "DEFAULT_MAX_RETRIES").load()
 
 
