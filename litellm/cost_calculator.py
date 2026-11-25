@@ -77,67 +77,8 @@ from litellm.litellm_core_utils.llm_cost_calc.utils import (
 from litellm.litellm_core_utils.llm_response_utils.response_metadata import response_ms_since_logging_start
 from litellm.litellm_core_utils.redact_messages import should_redact_message_logging
 from litellm.litellm_core_utils.service_tier_utils import GEMINI_TRAFFIC_TYPE_SERVICE_TIERS
-from litellm.llms.anthropic.cost_calculation import (
-    cost_per_token as anthropic_cost_per_token,
-)
-from litellm.llms.anthropic.cost_calculation import (
-    get_anthropic_web_search_requests_from_response,
-)
-from litellm.llms.azure.cost_calculation import (
-    cost_per_token as azure_openai_cost_per_token,
-)
-from litellm.llms.azure_ai.cost_calculator import (
-    cost_per_token as azure_ai_cost_per_token,
-)
-from litellm.llms.azure_ai.cost_calculator import (
-    is_azure_model_router as azure_ai_is_model_router_name,
-)
 from litellm.llms.base_llm.search.transformation import SearchResponse
-from litellm.llms.bedrock.cost_calculation import (
-    cost_per_token as bedrock_cost_per_token,
-)
-from litellm.llms.databricks.cost_calculator import (
-    cost_per_token as databricks_cost_per_token,
-)
-from litellm.llms.deepseek.cost_calculator import (
-    cost_per_token as deepseek_cost_per_token,
-)
-from litellm.llms.fireworks_ai.cost_calculator import (
-    cost_per_token as fireworks_ai_cost_per_token,
-)
-from litellm.llms.gemini.cost_calculator import cost_per_token as gemini_cost_per_token
-from litellm.llms.lemonade.cost_calculator import (
-    cost_per_token as lemonade_cost_per_token,
-)
-from litellm.llms.openai.cost_calculation import (
-    cost_per_second as openai_cost_per_second,
-)
-from litellm.llms.openai.cost_calculation import (
-    cost_per_token as openai_cost_per_token,
-)
-from litellm.llms.openai.cost_calculation import (
-    video_clip_cost,
-    video_output_cost_per_second,
-)
-from litellm.llms.perplexity.cost_calculator import (
-    cost_per_token as perplexity_cost_per_token,
-)
-from litellm.llms.tencent.cost_calculator import (
-    cost_per_token as tencent_cost_per_token,
-)
-from litellm.llms.together_ai.cost_calculator import (
-    get_model_params_and_category,
-    has_together_registry_pricing,
-)
-from litellm.llms.vertex_ai.common_utils import get_vertex_ai_lyria_generation_cost
-from litellm.llms.vertex_ai.cost_calculator import (
-    cost_per_character as google_cost_per_character,
-)
-from litellm.llms.vertex_ai.cost_calculator import (
-    cost_per_token as google_cost_per_token,
-)
-from litellm.llms.vertex_ai.cost_calculator import cost_router as google_cost_router
-from litellm.llms.xai.cost_calculator import cost_per_token as xai_cost_per_token
+from litellm.llms.registry import ProviderFunction
 from litellm.responses.utils import ResponseAPILoggingUtils
 from litellm.rust_bridge._native import NativeReceipt, billable_service_tier
 from litellm.types.agents import LiteLLMSendMessageResponse
@@ -200,6 +141,73 @@ from litellm.utils import (
     token_counter,
     unmapped_model_generalization,
 )
+
+if TYPE_CHECKING:
+    from litellm.llms.anthropic.cost_calculation import cost_per_token as anthropic_cost_per_token
+    from litellm.llms.anthropic.cost_calculation import (
+        get_anthropic_web_search_requests_from_response as get_anthropic_web_search_requests_from_response,
+    )
+    from litellm.llms.azure.cost_calculation import cost_per_token as azure_openai_cost_per_token
+    from litellm.llms.azure_ai.cost_calculator import cost_per_token as azure_ai_cost_per_token
+    from litellm.llms.azure_ai.cost_calculator import is_azure_model_router as azure_ai_is_model_router_name
+    from litellm.llms.bedrock.cost_calculation import cost_per_token as bedrock_cost_per_token
+    from litellm.llms.databricks.cost_calculator import cost_per_token as databricks_cost_per_token
+    from litellm.llms.deepseek.cost_calculator import cost_per_token as deepseek_cost_per_token
+    from litellm.llms.fireworks_ai.cost_calculator import cost_per_token as fireworks_ai_cost_per_token
+    from litellm.llms.gemini.cost_calculator import cost_per_token as gemini_cost_per_token
+    from litellm.llms.lemonade.cost_calculator import cost_per_token as lemonade_cost_per_token
+    from litellm.llms.openai.cost_calculation import cost_per_second as openai_cost_per_second
+    from litellm.llms.openai.cost_calculation import cost_per_token as openai_cost_per_token
+    from litellm.llms.openai.cost_calculation import video_clip_cost as video_clip_cost
+    from litellm.llms.openai.cost_calculation import video_output_cost_per_second as video_output_cost_per_second
+    from litellm.llms.perplexity.cost_calculator import cost_per_token as perplexity_cost_per_token
+    from litellm.llms.tencent.cost_calculator import cost_per_token as tencent_cost_per_token
+    from litellm.llms.together_ai.cost_calculator import get_model_params_and_category as get_model_params_and_category
+    from litellm.llms.together_ai.cost_calculator import has_together_registry_pricing as has_together_registry_pricing
+    from litellm.llms.vertex_ai.common_utils import (
+        get_vertex_ai_lyria_generation_cost as get_vertex_ai_lyria_generation_cost,
+    )
+    from litellm.llms.vertex_ai.cost_calculator import cost_per_character as google_cost_per_character
+    from litellm.llms.vertex_ai.cost_calculator import cost_per_token as google_cost_per_token
+    from litellm.llms.vertex_ai.cost_calculator import cost_router as google_cost_router
+    from litellm.llms.xai.cost_calculator import cost_per_token as xai_cost_per_token
+else:
+    anthropic_cost_per_token: Final = ProviderFunction("litellm.llms.anthropic.cost_calculation", "cost_per_token")
+    get_anthropic_web_search_requests_from_response: Final = ProviderFunction(
+        "litellm.llms.anthropic.cost_calculation", "get_anthropic_web_search_requests_from_response"
+    )
+    azure_openai_cost_per_token: Final = ProviderFunction("litellm.llms.azure.cost_calculation", "cost_per_token")
+    azure_ai_cost_per_token: Final = ProviderFunction("litellm.llms.azure_ai.cost_calculator", "cost_per_token")
+    azure_ai_is_model_router_name: Final = ProviderFunction(
+        "litellm.llms.azure_ai.cost_calculator", "is_azure_model_router"
+    )
+    bedrock_cost_per_token: Final = ProviderFunction("litellm.llms.bedrock.cost_calculation", "cost_per_token")
+    databricks_cost_per_token: Final = ProviderFunction("litellm.llms.databricks.cost_calculator", "cost_per_token")
+    deepseek_cost_per_token: Final = ProviderFunction("litellm.llms.deepseek.cost_calculator", "cost_per_token")
+    fireworks_ai_cost_per_token: Final = ProviderFunction("litellm.llms.fireworks_ai.cost_calculator", "cost_per_token")
+    gemini_cost_per_token: Final = ProviderFunction("litellm.llms.gemini.cost_calculator", "cost_per_token")
+    lemonade_cost_per_token: Final = ProviderFunction("litellm.llms.lemonade.cost_calculator", "cost_per_token")
+    openai_cost_per_second: Final = ProviderFunction("litellm.llms.openai.cost_calculation", "cost_per_second")
+    openai_cost_per_token: Final = ProviderFunction("litellm.llms.openai.cost_calculation", "cost_per_token")
+    video_clip_cost: Final = ProviderFunction("litellm.llms.openai.cost_calculation", "video_clip_cost")
+    video_output_cost_per_second: Final = ProviderFunction(
+        "litellm.llms.openai.cost_calculation", "video_output_cost_per_second"
+    )
+    perplexity_cost_per_token: Final = ProviderFunction("litellm.llms.perplexity.cost_calculator", "cost_per_token")
+    tencent_cost_per_token: Final = ProviderFunction("litellm.llms.tencent.cost_calculator", "cost_per_token")
+    get_model_params_and_category: Final = ProviderFunction(
+        "litellm.llms.together_ai.cost_calculator", "get_model_params_and_category"
+    )
+    has_together_registry_pricing: Final = ProviderFunction(
+        "litellm.llms.together_ai.cost_calculator", "has_together_registry_pricing"
+    )
+    get_vertex_ai_lyria_generation_cost: Final = ProviderFunction(
+        "litellm.llms.vertex_ai.common_utils", "get_vertex_ai_lyria_generation_cost"
+    )
+    google_cost_per_character: Final = ProviderFunction("litellm.llms.vertex_ai.cost_calculator", "cost_per_character")
+    google_cost_per_token: Final = ProviderFunction("litellm.llms.vertex_ai.cost_calculator", "cost_per_token")
+    google_cost_router: Final = ProviderFunction("litellm.llms.vertex_ai.cost_calculator", "cost_router")
+    xai_cost_per_token: Final = ProviderFunction("litellm.llms.xai.cost_calculator", "cost_per_token")
 
 if TYPE_CHECKING:
     from litellm.litellm_core_utils.litellm_logging import (
