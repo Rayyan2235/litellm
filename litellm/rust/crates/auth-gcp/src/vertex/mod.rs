@@ -771,7 +771,10 @@ mod tests {
     #[rstest]
     #[case::file(file_source, "granted", "subject_token=file-subject")]
     #[case::url(url_source, "granted", "subject_token=url-subject")]
-    #[case::aws_metadata(aws_metadata_source, "granted", "subject_token=%257B")]
+    #[cfg_attr(
+        not(feature = "fips"),
+        case::aws_metadata(aws_metadata_source, "granted", "subject_token=%257B")
+    )]
     #[case::impersonated(impersonating_source, "impersonated", "subject_token=file-subject")]
     #[case::explicit_aws(explicit_aws, "granted", "subject_token=%257B%2522headers%2522")]
     #[case::explicit_aws_impersonated(
@@ -798,6 +801,34 @@ mod tests {
         assert_eq!(login.token.expose(), token);
         let exchanges = google.sent_to("/token");
         assert!(exchanges[0].body.contains(subject), "{exchanges:?}");
+    }
+
+    #[cfg(feature = "fips")]
+    #[rstest]
+    #[case::vertex_credentials(explicit(|google| aws_metadata_source(google, Path::new("/"))), PythonException::Malformed)]
+    #[case::application_default_file(Box::new(|google: &Google, directory: &Path| adc_file(aws_metadata_source(google, directory))(google, directory)), PythonException::DefaultCredentials)]
+    #[tokio::test]
+    async fn the_fips_build_refuses_an_aws_source_google_s_sdk_would_sign(
+        #[future] google: Google,
+        #[case] setup: Setup,
+        #[case] exception: PythonException,
+    ) {
+        let google = google.await;
+        let directory = tempfile::tempdir().unwrap();
+        let (credentials, environment) = setup(&google, directory.path());
+
+        let refused = failure(
+            auth(environment)
+                .login(credentials, Some("p".into()))
+                .await
+                .unwrap_err(),
+        );
+
+        assert_eq!(
+            (refused.exception, refused.message.as_str()),
+            (exception, crate::google::builders::AWS_SOURCE_IN_FIPS)
+        );
+        assert!(google.sent_to("/token").is_empty());
     }
 
     #[rstest]
@@ -1391,7 +1422,12 @@ mod tests {
                 explicit_aws.clone(),
             )))
             .await;
-        assert!(shared.is_ok(), "{:?}", shared.err());
+        assert_eq!(
+            shared.is_ok(),
+            !cfg!(feature = "fips"),
+            "{:?}",
+            shared.err()
+        );
         let error = auth(FakeEnvironment::default())
             .login(Some(explicit_aws), Some("p".into()))
             .await
