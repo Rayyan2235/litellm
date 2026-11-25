@@ -85,10 +85,12 @@ pub fn app_with_router_settings(
     router_settings: Value,
 ) -> Router {
     hosted_app(
-        test_params(model, api_base)
-            .into_iter()
-            .chain(litellm_params.as_object().cloned().unwrap_or_default())
-            .collect(),
+        vec![
+            test_params(model, api_base)
+                .into_iter()
+                .chain(litellm_params.as_object().cloned().unwrap_or_default())
+                .collect(),
+        ],
         Value::Object(Map::new()),
         None,
         NativeHost::default(),
@@ -102,16 +104,31 @@ pub fn app_with_callbacks(
     api_base: &str,
     callbacks: Vec<Arc<dyn ErasedCallback>>,
 ) -> Router {
+    app_over_with_callbacks(vec![test_params(model, api_base)], json!({}), callbacks)
+}
+
+/// The app whose `public/model` group is one deployment for each of `litellm_params`, with its
+/// router built from `router_settings` and `callbacks` run around each call.
+pub fn app_over_with_callbacks(
+    litellm_params: Vec<Map<String, Value>>,
+    router_settings: Value,
+    callbacks: Vec<Arc<dyn ErasedCallback>>,
+) -> Router {
     hosted_app(
-        test_params(model, api_base),
+        litellm_params,
         Value::Object(Map::new()),
         None,
         NativeHost::new(
             Arc::new(Callbacks::new(callbacks.into_iter().map(Into::into).collect()).unwrap()),
             Arc::default(),
         ),
-        &RouterSettings::default(),
+        &serde_json::from_value(router_settings).unwrap(),
     )
+}
+
+/// The params of a deployment of `model` at `api_base`.
+pub fn deployment_params(model: &str, api_base: &str) -> Map<String, Value> {
+    test_params(model, api_base)
 }
 
 fn test_params(model: &str, api_base: &str) -> Map<String, Value> {
@@ -139,7 +156,7 @@ fn deployment_app(
     cache: Option<Arc<dyn litellm_cache_response::ResponseCacheService>>,
 ) -> Router {
     hosted_app(
-        litellm_params,
+        vec![litellm_params],
         shaping,
         cache,
         NativeHost::default(),
@@ -148,7 +165,7 @@ fn deployment_app(
 }
 
 fn hosted_app(
-    litellm_params: Map<String, Value>,
+    litellm_params: Vec<Map<String, Value>>,
     shaping: Value,
     cache: Option<Arc<dyn litellm_cache_response::ResponseCacheService>>,
     host: NativeHost,
@@ -161,11 +178,14 @@ fn hosted_app(
     let (config, dynamic) = RouterConfig::from_settings(router_settings).unwrap();
     let models = litellm_router_core::Router::new(
         RouterConfig {
-            model_list: vec![DeploymentSpec {
-                model_name: "public/model".into(),
-                litellm_params,
-                ..DeploymentSpec::default()
-            }],
+            model_list: litellm_params
+                .into_iter()
+                .map(|litellm_params| DeploymentSpec {
+                    model_name: "public/model".into(),
+                    litellm_params,
+                    ..DeploymentSpec::default()
+                })
+                .collect(),
             ..config
         },
         dynamic,

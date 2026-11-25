@@ -25,7 +25,7 @@ use parking_lot::Mutex;
 use serde_json::Value;
 use tokio::task::{JoinHandle, futures::TaskLocalFuture};
 
-pub use self::entries::{CallState, Charged, Ended, unix};
+pub use self::entries::{AttemptOn, CallState, Charged, Ended, FailureFacts, unix};
 
 tokio::task_local! {
     static RECORD: Arc<CallRecord>;

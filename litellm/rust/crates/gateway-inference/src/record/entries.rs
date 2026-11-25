@@ -1,9 +1,13 @@
 //! What the gateway knows of one call so far, as typed entries. How a callback reads and writes
 //! them by contract field is the callbacks' own view (`gateway/src/callbacks/fields.rs`).
 
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use litellm_host::interceptors::Cost;
+use litellm_router_core::Deployment;
 use serde_json::{Map, Value};
 
 use crate::{CallType, ServedCall};
@@ -59,6 +63,26 @@ pub struct Charged {
     pub user_id: Option<String>,
 }
 
+/// What a failed call's error says of it, as Python's `get_error_information` reads the exception
+/// the proxy raised for it. It has no traceback, since the gateway raised no Python exception.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FailureFacts {
+    /// The HTTP status the caller got.
+    pub error_code: String,
+    /// The class of the exception Python raises for the same error.
+    pub error_class: String,
+    /// The provider the failed attempt called, `None` for an error no provider raised.
+    pub llm_provider: Option<String>,
+    pub error_message: String,
+}
+
+/// The deployment an attempt ran on, and the model group it served.
+#[derive(Clone, Debug)]
+pub struct AttemptOn {
+    pub model_group: String,
+    pub deployment: Arc<Deployment>,
+}
+
 /// One call as it stands.
 pub struct CallState {
     call_type: Option<CallType>,
@@ -78,7 +102,10 @@ pub struct CallState {
     response_headers: Map<String, Value>,
     /// What the latest attempt's route settled the call's cost as.
     cost: Option<Cost>,
+    /// The latest attempt's deployment, which a failed call's log names.
+    attempt: Option<AttemptOn>,
     served: Option<ServedCall>,
+    failure: Option<FailureFacts>,
     ended: Option<Ended>,
 }
 
@@ -106,7 +133,9 @@ impl CallState {
             rate_limit_statuses: None,
             response_headers: Map::new(),
             cost: None,
+            attempt: None,
             served: None,
+            failure: None,
             ended: None,
         }
     }
@@ -243,15 +272,31 @@ impl CallState {
         self.cost.as_ref()
     }
 
+    /// An attempt starts on `on`, so the call names it should the call fail after it.
+    pub fn attempt_on(&mut self, on: AttemptOn) {
+        self.attempt = Some(on);
+    }
+
+    /// The latest attempt's deployment, `None` for a call that was never routed.
+    pub fn attempt(&self) -> Option<&AttemptOn> {
+        self.attempt.as_ref()
+    }
+
     pub fn serve(&mut self, served: ServedCall) {
         self.end = Some(SystemTime::now());
         self.served = Some(served);
         self.ended = Some(Ended::Served);
     }
 
-    pub fn fail(&mut self) {
+    pub fn fail(&mut self, failure: FailureFacts) {
         self.end = Some(SystemTime::now());
+        self.failure = Some(failure);
         self.ended = Some(Ended::Failed);
+    }
+
+    /// What the error a failed call ended on says of it.
+    pub fn failure(&self) -> Option<&FailureFacts> {
+        self.failure.as_ref()
     }
 
     pub fn served(&self) -> Option<&ServedCall> {

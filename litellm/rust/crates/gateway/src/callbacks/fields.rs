@@ -23,7 +23,7 @@ use serde_json::{Map, Value};
 
 use super::{
     parallel_request_limiter::{MASTER_KEY_ALIAS, PROXY_ADMIN_NAME},
-    spend_log_input::{self, Served},
+    spend_log_input::{self, Failed, Served},
 };
 use crate::host::NativeRows;
 
@@ -125,7 +125,10 @@ fn deployment(entries: &CallState) -> Option<&litellm_router_core::Deployment> {
 /// The provider the served deployment was called through, as Python's `custom_llm_provider`
 /// names it.
 fn provider(entries: &CallState) -> Option<String> {
-    let deployment = deployment(entries)?;
+    deployment_provider(deployment(entries)?)
+}
+
+fn deployment_provider(deployment: &litellm_router_core::Deployment) -> Option<String> {
     deployment
         .resolved_provider
         .clone()
@@ -229,7 +232,17 @@ fn timing(entries: &CallState) -> AttemptTiming {
 /// What the served attempt's route settled the call's cost as. A cache hit cost nothing, and a
 /// stream's price is read off its meter once the stream ended. `None` for a call the route left
 /// unpriced.
+///
+/// A failed call's row costs nothing, whatever its attempt settled. Accepted differences: Python
+/// prices a failure the provider likely billed (a read timeout, a client disconnect, the total
+/// timeout running out), and charges a failure whose logging payload carries `cost_finalized`.
 fn cost(entries: &CallState) -> Option<Cost> {
+    if entries.ended() == Some(Ended::Failed) {
+        return Some(Cost {
+            failure_row_response_cost: Some(0.0),
+            ..Cost::default()
+        });
+    }
     let amount = match entries.cost()? {
         Settled::Reported { amount } => Scalar::Float(amount.as_f64()?),
         Settled::Priced(priced) => Scalar::Float(priced.receipt.total),
@@ -243,9 +256,26 @@ fn cost(entries: &CallState) -> Option<Cost> {
     })
 }
 
-/// The spend log callback's input for a served call. A failed call has none yet.
+/// The spend log callback's input for a call that ended: served, or failed.
 fn spend_log_input(entries: &CallState) -> Option<Value> {
     let call_type = entries.call_type()?;
+    if entries.ended()? == Ended::Failed {
+        let attempt = entries.attempt();
+        let provider = attempt.and_then(|on| deployment_provider(&on.deployment));
+        return spend_log_input::failure(&Failed {
+            call_type,
+            route: route(call_type),
+            charged: entries.charged(),
+            call_id: entries.call_id(),
+            trace_id: entries.trace_id(),
+            start: entries.start(),
+            end: entries.end()?,
+            model: entries.model(),
+            provider: provider.as_deref(),
+            attempt,
+            failure: entries.failure()?,
+        });
+    }
     let provider = provider(entries);
     spend_log_input::success(&Served {
         call_type,
@@ -386,7 +416,7 @@ pub fn write(entries: &mut CallState, op: PatchOp) -> Result<(), Unwritable> {
 mod tests {
     use litellm_gateway_inference::{
         ServedCall,
-        record::{self, CallRecord},
+        record::{self, CallRecord, FailureFacts},
     };
     use rstest::rstest;
     use serde_json::json;
@@ -511,7 +541,7 @@ mod tests {
             entries.name_call("call-1".to_owned());
             match served {
                 Some(served) => entries.serve(served),
-                None => entries.fail(),
+                None => entries.fail(FailureFacts::default()),
             }
             spend_log_id(entries).id
         });
@@ -520,8 +550,8 @@ mod tests {
 
     #[rstest]
     #[case::a_served_call(Some(served(Some("msg_1"))), Some("success"))]
-    #[case::a_failed_call(None, None)]
-    fn only_a_served_call_is_handed_a_spend_log_input(
+    #[case::a_failed_call(None, Some("failure"))]
+    fn a_call_that_ended_is_handed_the_spend_log_input_of_how_it_ended(
         #[case] served: Option<ServedCall>,
         #[case] kind: Option<&str>,
     ) {
@@ -529,7 +559,7 @@ mod tests {
             entries.release();
             match served {
                 Some(served) => entries.serve(served),
-                None => entries.fail(),
+                None => entries.fail(FailureFacts::default()),
             }
             input(
                 entries,
@@ -582,6 +612,32 @@ mod tests {
             read.as_ref()
                 .and_then(|cost| cost["response_cost"].as_f64()),
             expected
+        );
+    }
+
+    #[rstest]
+    #[case::priced_by_the_route(Some(Settled::Priced(Box::new(priced(0.25)))))]
+    #[case::reported_by_the_provider(
+        Some(Settled::Reported { amount: serde_json::Number::from_f64(1.5).unwrap() })
+    )]
+    #[case::no_attempt_settled(None)]
+    fn a_failed_calls_row_costs_nothing_whatever_its_attempt_settled(
+        #[case] settled: Option<Settled>,
+    ) {
+        let read = on_a_call(|entries| {
+            if let Some(settled) = settled {
+                entries.bill(settled);
+            }
+            entries.fail(FailureFacts::default());
+            read(entries, Field::Cost)
+        });
+        let cost: Cost = serde_json::from_value(read.unwrap()).unwrap();
+        assert_eq!(
+            cost,
+            Cost {
+                failure_row_response_cost: Some(0.0),
+                ..Cost::default()
+            }
         );
     }
 

@@ -20,7 +20,9 @@ use litellm_router_core::Deployment;
 use serde_json::{Map, Value};
 
 use crate::{
-    Ended, Gateway, Host, record,
+    Ended, Gateway, Host,
+    error::stream_failure,
+    record::{self, FailureFacts},
     serve::Endpoint,
     stream_event::Counts,
     stream_outcome::{self, Outcome},
@@ -114,7 +116,8 @@ pub trait CallHooks: Send + Sync + 'static {
 
     fn succeeded(&self, served: ServedCall) -> impl Future<Output = ()> + Send;
 
-    fn failed(&self) -> impl Future<Output = ()> + Send;
+    /// The call ended on the error `failure` tells of.
+    fn failed(&self, failure: FailureFacts) -> impl Future<Output = ()> + Send;
 }
 
 /// A served call's response with the success log to send once it goes out, `None` for a
@@ -172,10 +175,22 @@ where
             Ok(response)
         }
         Err(ended) => {
-            hooks.failed().await;
+            hooks
+                .failed(ended.failure(attempted_provider().as_deref()))
+                .await;
             Err(ended)
         }
     }
+}
+
+/// The provider the call's latest attempt called, `None` for a call that was never routed.
+fn attempted_provider() -> Option<String> {
+    record::read(|state| {
+        state
+            .attempt()
+            .map(|on| on.deployment.provider().to_owned())
+    })
+    .flatten()
 }
 
 /// What served a call: the model group, an alias resolved, and the deployment that answered.
@@ -272,7 +287,10 @@ pub(crate) async fn post_call<E: Endpoint, K: CallHooks>(
                         };
                         hooks.succeeded(served).await;
                     }
-                    Err(_) => hooks.failed().await,
+                    Err(error) => {
+                        let provider = deployment.as_deref().map(Deployment::provider);
+                        hooks.failed(stream_failure(&error, provider)).await;
+                    }
                 }
             }
         },
