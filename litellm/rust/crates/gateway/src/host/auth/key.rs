@@ -8,6 +8,7 @@ use jiff::{Timestamp, civil::DateTime, tz::TimeZone};
 use litellm_gateway_auth_core::{
     KeyHash, StoredKey,
     authn::key::{KeyRecord, Keyed},
+    authz::ModelList,
 };
 use litellm_python_compat::{Value, json};
 use litellm_redis_store::auth_cache::{Bag, CachedKey, CachedObjectPermission, Lists};
@@ -27,16 +28,6 @@ macro_rules! carried {
 
 /// The key type the proxy gives a key generated without one, which reaches every route.
 const DEFAULT_KEY_TYPE: &str = "default";
-
-/// The `models` entries the proxy reads through a team or a user, which a key with neither does
-/// not have.
-const OWNER_MODELS: [&str; 2] = ["all-team-models", "no-default-models"];
-
-/// Whether the auth core's model rule reads a `models` entry as the proxy does: a name, an
-/// access group or `*`. A pattern like `anthropic/*` the proxy matches against providers is not read.
-fn is_read(model: &str) -> bool {
-    !OWNER_MODELS.contains(&model) && (model == "*" || !model.contains('*'))
-}
 
 pub(super) trait Carried {
     fn is_carried(&self) -> bool;
@@ -288,7 +279,7 @@ fn held(key: &CachedKey) -> Held {
     let other_key_type = key_type
         .as_deref()
         .is_some_and(|key_type| key_type != DEFAULT_KEY_TYPE);
-    let unread_models = models.iter().any(|model| !is_read(model));
+    let unread_models = ModelList::read(models) == ModelList::Unread;
     let ui_team = team_id.as_deref() == Some(UI_TEAM);
     let unread = &unread.iter().any(|(_, value)| value.is_carried());
     Held {
