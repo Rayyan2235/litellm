@@ -1,4 +1,5 @@
-"""Where each lazily loaded attribute of `litellm` and `litellm.utils` lives, as name -> (module, attribute)."""
+"""Where each lazily loaded attribute of `litellm` and `litellm.utils` lives, as name -> (module, attribute), and the
+provider modules that `litellm.cost_calculator` imports inside the functions that call them."""
 
 from collections.abc import Mapping
 from types import MappingProxyType
@@ -699,4 +700,27 @@ UTILS_ATTRIBUTES: Final[Mapping[str, tuple[str, str]]] = MappingProxyType(
         "ChatCompletionToolCallFunctionChunk": ("litellm.types.llms.openai", "ChatCompletionToolCallFunctionChunk"),
         "LiteLLM_Params": ("litellm.types.router", "LiteLLM_Params"),
     }
+)
+
+FIRST_CALL_MODULES: Final[tuple[str, ...]] = (
+    "litellm.llms.anthropic.cost_calculation",
+    "litellm.llms.azure.cost_calculation",
+    "litellm.llms.azure_ai.common_utils",
+    "litellm.llms.azure_ai.cost_calculator",
+    "litellm.llms.base_llm.ocr.transformation",
+    "litellm.llms.bedrock.common_utils",
+    "litellm.llms.bedrock.cost_calculation",
+    "litellm.llms.dashscope.cost_calculator",
+    "litellm.llms.databricks.cost_calculator",
+    "litellm.llms.deepseek.cost_calculator",
+    "litellm.llms.fireworks_ai.cost_calculator",
+    "litellm.llms.gemini.cost_calculator",
+    "litellm.llms.lemonade.cost_calculator",
+    "litellm.llms.openai.cost_calculation",
+    "litellm.llms.perplexity.cost_calculator",
+    "litellm.llms.tencent.cost_calculator",
+    "litellm.llms.together_ai.cost_calculator",
+    "litellm.llms.vertex_ai.common_utils",
+    "litellm.llms.vertex_ai.cost_calculator",
+    "litellm.llms.xai.cost_calculator",
 )

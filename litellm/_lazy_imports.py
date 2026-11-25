@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Final
 
 from pydantic import TypeAdapter
 
-from ._lazy_imports_registry import LITELLM_ATTRIBUTES, UTILS_ATTRIBUTES
+from ._lazy_imports_registry import FIRST_CALL_MODULES, LITELLM_ATTRIBUTES, UTILS_ATTRIBUTES
 
 if TYPE_CHECKING:
     import httpx
@@ -150,3 +150,15 @@ def resolve_lazy_attribute(module_name: str, name: str) -> object:
         raise AttributeError(f"module {module_name!r} has no attribute {name!r}")
     cached: Final = _cached("litellm", name)
     return cached if cached is not _NOT_LOADED else _cache("litellm", name, factory())
+
+
+def load_all() -> None:
+    """Import everything `litellm` would otherwise import on first use, for LITELLM_DISABLE_LAZY_LOADING."""
+    for name in LITELLM_ATTRIBUTES:
+        _ = resolve_lazy_attribute("litellm", name)
+    for name in UTILS_ATTRIBUTES:
+        _ = resolve_lazy_attribute("litellm.utils", name)
+    for name in _LITELLM_FACTORIES:
+        _ = resolve_lazy_attribute("litellm", name)
+    for module_path in FIRST_CALL_MODULES:
+        _ = importlib.import_module(module_path)
